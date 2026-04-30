@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>한국 주식 분석 대시보드</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background:#f5f7fb; margin:0; padding:20px; color:#1f2937; }
+    .container { max-width:1100px; margin:0 auto; }
+    .card { background:#fff; border-radius:14px; padding:18px; box-shadow:0 3px 12px rgba(0,0,0,.08); margin-bottom:20px; }
+    h1 { margin-top:0; }
+    .row { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th, td { border-bottom:1px solid #e5e7eb; text-align:left; padding:10px 8px; vertical-align:top; }
+    th { background:#f9fafb; }
+    .chip { display:inline-block; padding:4px 8px; border-radius:8px; background:#ecfeff; color:#0e7490; font-size:12px; }
+    .pos { color:#dc2626; font-weight:600; }
+    .neg { color:#2563eb; font-weight:600; }
+    button { border:0; background:#111827; color:#fff; border-radius:10px; padding:10px 14px; cursor:pointer; }
+    .error { color:#b91c1c; }
+    @media (max-width:900px){ .row{grid-template-columns:1fr;} }
+  </style>
+</head>
+<body>
+  <div id="app" class="container">
+    <div class="card">
+      <h1>한국 주식 분석 대시보드</h1>
+      <p>네이버 주식 데이터를 기반으로 <strong>최근 일주일 상승률</strong>과 <strong>최근 5개 분기 영업이익 증가율</strong> 상위 종목을 보여줍니다.</p>
+      <button @click="loadData" :disabled="loading">{{ loading ? '분석 중...' : '데이터 새로고침' }}</button>
+      <p v-if="meta.generatedAt" style="margin-top:10px;">
+        <span class="chip">생성 시각: {{ new Date(meta.generatedAt).toLocaleString('ko-KR') }}</span>
+        <span class="chip" style="margin-left:8px;">분석 종목 수: {{ meta.scannedCount }}</span>
+      </p>
+      <p class="error" v-if="error">{{ error }}</p>
+    </div>
+
+    <div class="row" v-if="!loading">
+      <div class="card">
+        <h2>최근 일주일 상승률 TOP 10</h2>
+        <table>
+          <thead>
+            <tr><th>종목</th><th>코드</th><th>상승률</th><th>가격(최근/1주전)</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="stock in byWeekly" :key="`w-${stock.code}`">
+              <td>{{ stock.name }}</td>
+              <td>{{ stock.code }}</td>
+              <td :class="stock.weeklyChangePct >= 0 ? 'pos' : 'neg'">{{ stock.weeklyChangePct }}%</td>
+              <td>{{ stock.latest?.toLocaleString() }} / {{ stock.oneWeekAgo?.toLocaleString() }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>최근 5개 분기 영업이익 증가율 TOP 10</h2>
+        <table>
+          <thead>
+            <tr><th>종목</th><th>코드</th><th>증가율</th><th>최근 5개 분기 매출</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="stock in byOpGrowth" :key="`o-${stock.code}`">
+              <td>{{ stock.name }}</td>
+              <td>{{ stock.code }}</td>
+              <td :class="stock.opGrowthPct >= 0 ? 'pos' : 'neg'">{{ stock.opGrowthPct }}%</td>
+              <td>{{ stock.recentSales?.map(s => `${s.quarter}:${s.value.toLocaleString()}`).join(' | ') }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+<script>
+const { createApp } = Vue;
+createApp({
+  data() {
+    return {
+      loading: false,
+      error: '',
+      byWeekly: [],
+      byOpGrowth: [],
+      meta: {}
+    }
+  },
+  mounted() {
+    this.loadData();
+  },
+  methods: {
+    async loadData() {
+      this.loading = true;
+      this.error = '';
+      try {
+        const res = await fetch('/api/stocks/analyze');
+        if (!res.ok) throw new Error('API 요청 실패');
+        const json = await res.json();
+        this.byWeekly = json.byWeekly || [];
+        this.byOpGrowth = json.byOpGrowth || [];
+        this.meta = { generatedAt: json.generatedAt, scannedCount: json.scannedCount };
+      } catch (e) {
+        this.error = '데이터를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.';
+      } finally {
+        this.loading = false;
+      }
+    }
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
